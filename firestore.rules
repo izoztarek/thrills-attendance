@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    // يشوف حالة الملفات بعد تنفيذ الـ batch (بيتستخدم وقت الإعداد الأول بس)
+    function isAdminAfter() {
+      return signedIn() && existsAfter(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function nowMs() { return request.time.toMillis(); }
+    function ms(v) { return v is number && v > nowMs() - 43200000 && v < nowMs() + 120000; }
+
+    // أول مرة بس: الجهاز اللي بيعمل الإعداد الأول بيبقى هو المدير
+    match /meta/{doc} {
+      allow read: if true;
+      allow create: if doc == 'initialized'
+                    && !exists(/databases/$(database)/documents/meta/initialized)
+                    && isAdminAfter();
+    }
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+                    && !exists(/databases/$(database)/documents/meta/initialized);
+    }
+
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdminAfter();
+    }
+    match /staff/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /attendance/{id} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['staffId','name','branch','date','inAt','outAt','shiftId','shiftStart','lateMin','manual','ts'])
+        && request.resource.data.staffId is string
+        && exists(/databases/$(database)/documents/staff/$(request.resource.data.staffId))
+        && request.resource.data.outAt == null
+        && request.resource.data.manual == false
+        && request.resource.data.ts == request.time
+        && ms(request.resource.data.inAt));
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['outAt'])
+        && (
+          // تسجيل انصراف
+          (resource.data.outAt == null && ms(request.resource.data.outAt))
+          // تراجع عن الانصراف (خلال 4 دقايق)
+          || (resource.data.outAt != null && request.resource.data.outAt == null && nowMs() - resource.data.outAt < 240000)
+        ));
+      // تراجع عن الحضور (خلال 4 دقايق)
+      allow delete: if isAdmin() || (resource.data.manual == false && nowMs() - resource.data.ts.toMillis() < 240000);
+    }
+
+    // التنبيهات: أي جهاز يقدر يسجل تنبيه جديد مرة واحدة بس (منع التكرار)، والمدير بس هو اللي يقراها
+    match /alerts/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['kind','staffId','name','branch','msg','date','ts'])
+                    && request.resource.data.kind in ['late','early','absent','forgot','test']
+                    && request.resource.data.msg is string && request.resource.data.msg.size() < 300
+                    && request.resource.data.ts == request.time;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

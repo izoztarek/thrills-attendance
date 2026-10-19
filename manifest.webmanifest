@@ -1,0 +1,17 @@
+{
+  "name": "حضور Thrills",
+  "short_name": "Thrills",
+  "description": "الحضور والانصراف لموظفي Thrills",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFF6FA",
+  "theme_color": "#D1237B",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
