@@ -41,8 +41,12 @@ const S={db:null,auth:null,fbUser:null,isAdmin:false,alerts:[],sent:new Set(),cf
   loaded:{cfg:false,staff:false,att:false},view:'kiosk',tab:'today',branch:'all',search:'',
   adm:{until:0,keep:false,date:dkey(Date.now()),branch:'all'},rep:{from:'',to:'',branch:'all',recs:null,loading:false},draft:null,today:dkey(Date.now())};
 try{const b=localStorage.getItem('thrills.branch');if(b)S.branch=b}catch(e){}
-S.meMode=(location.hash==='#me');
-try{if(S.meMode)localStorage.setItem('thrills.mode','me');else if(localStorage.getItem('thrills.mode')==='me')S.meMode=true}catch(e){}
+(function(){
+  const H=location.hash.replace('#','');let M=(H==='me'||H==='order'||H==='factory')?H:null;
+  try{if(H==='home')localStorage.removeItem('thrills.mode');else if(M)localStorage.setItem('thrills.mode',M);else M=localStorage.getItem('thrills.mode')}catch(e){}
+  S.meMode=(M==='me');
+  if(M==='order'||M==='factory')S.view=M;
+})();
 S.me=null;S.meSearch='';S.meBusy=false;
 try{S.me=localStorage.getItem('thrills.me')}catch(e){}
 
@@ -121,9 +125,10 @@ function render(){
     if(!S.draft)S.draft=newDraft();
     setApp(head()+setupHTML());return;
   }
+  if((S.view==='order'||S.view==='factory')&&window.ThrillsOrders){window.ThrillsOrders.render();return}
   if(S.meMode){S.view='me';meRender();return}
   if(S.view==='admin'&&S.isAdmin){
-    setApp(head(true)+'<nav class="tabs" role="tablist">'+[['today','اليوم'],['report','التقارير'],['staff','الموظفين'],['alerts','التنبيهات'],['settings','الإعدادات']].map(t=>
+    setApp(head(true)+'<nav class="tabs" role="tablist">'+[['today','اليوم'],['orders','الطلبات'],['report','التقارير'],['staff','الموظفين'],['oset','الأطعمة'],['alerts','التنبيهات'],['settings','الإعدادات']].map(t=>
       '<button class="tab" role="tab" data-act="tab" data-t="'+t[0]+'" aria-selected="'+(S.tab===t[0])+'">'+t[1]+'</button>').join('')+'</nav><main class="panel" id="abody"></main>');
     adminBody();return;
   }
@@ -133,11 +138,11 @@ function render(){
   const chips=brs.length>1?'<div class="chips" role="group" aria-label="الفرع">'+
     ['all'].concat(brs.map(b=>b.id)).map(id=>'<button class="chip" data-act="chip" data-b="'+esc(id)+'" aria-pressed="'+(S.branch===id)+'">'+(id==='all'?'كل الفروع':esc(brName(id)))+'</button>').join('')+'</div>':'<span></span>';
   setApp(head()+'<div class="bar">'+chips+'<label class="search"><input id="q" class="inp" type="search" placeholder="دوّر على اسمك" autocomplete="off" value="'+esc(S.search)+'"></label></div>'+
-    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
+    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
   fillGrid();tick();
 }
-function head(admin){
-  return '<header class="top"><div class="brand"><span class="logo">Thrills</span><span class="sub">'+(admin?'لوحة المدير':'الحضور والانصراف')+'</span></div>'+
+function head(admin,sub){
+  return '<header class="top"><div class="brand"><span class="logo">Thrills</span><span class="sub">'+(sub||(admin?'لوحة المدير':'الحضور والانصراف'))+'</span></div>'+
     (admin?'<button class="btn" data-act="logout">خروج</button>':'<div class="clock"><b id="clk"></b><span id="dt"></span></div>')+'</header>';
 }
 function clockUpdate(){
@@ -425,7 +430,7 @@ function tabAlerts(){
 
 function adminBody(){
   const el=$('#abody');if(!el)return;
-  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings}[S.tab]();
+  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset()}[S.tab]();
 }
 function branchChips(cur,act){
   const brs=S.cfg.branches||[];if(brs.length<2)return '';
@@ -754,7 +759,7 @@ document.addEventListener('click',async e=>{
     case 'copy-topic':copyTopic();break;
     case 'reset-pw':resetPw();break;
     case 'logout':logout();break;
-    case 'tab':S.tab=t.dataset.t;if(S.tab==='settings')S.draft=newDraft(S.cfg);render();break;
+    case 'tab':S.tab=t.dataset.t;if(S.tab==='settings')S.draft=newDraft(S.cfg);if(S.tab==='oset'&&window.ThrillsOrders)window.ThrillsOrders.resetDraft();render();break;
     case 'a-chip':S.adm.branch=t.dataset.b;adminBody();break;
     case 'd-prev':S.adm.date=addDays(S.adm.date,-1);adminBody();break;
     case 'd-next':S.adm.date=addDays(S.adm.date,1);adminBody();break;
@@ -816,6 +821,7 @@ async function boot(){
   setInterval(sweep,60000);setTimeout(sweep,10000);
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
+window.__T={S,$,esc,toast,wr,openModal,closeModal,mapDocs,fmtT,fmtDate,fmtDur,dkey,uid,brName,hashPin,newTopic,setApp,head,render,norm,adminBody};
 boot();
 
 

@@ -66,5 +66,30 @@ service cloud.firestore {
                     && request.resource.data.ts == request.time;
       allow update, delete: if isAdmin();
     }
+
+    // طلبات نواقص الأيس كريم: الفرع بيعمل طلب جديد، والمصنع/الفرع بيغيّروا الحالة بس (بالترتيب)، والمدير بس هو اللي يمسح
+    match /orders/{id} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['branch','branchName','by','items','note','urgent','status','ts'])
+        && request.resource.data.status == 'new'
+        && request.resource.data.branch is string && request.resource.data.branch.size() < 60
+        && request.resource.data.branchName is string && request.resource.data.branchName.size() < 80
+        && request.resource.data.by is string && request.resource.data.by.size() > 1 && request.resource.data.by.size() < 60
+        && request.resource.data.items is list && request.resource.data.items.size() > 0 && request.resource.data.items.size() <= 60
+        && request.resource.data.note is string && request.resource.data.note.size() < 300
+        && request.resource.data.urgent is bool
+        && request.resource.data.ts == request.time);
+      allow update: if isAdmin() || (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','prepAt','sentAt','doneAt','cancelAt'])
+          && (
+            (resource.data.status == 'new' && request.resource.data.status in ['prep','sent','cancelled'])
+            || (resource.data.status == 'prep' && request.resource.data.status in ['sent','cancelled'])
+            || (resource.data.status == 'sent' && request.resource.data.status == 'done')))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fnote'])
+          && request.resource.data.fnote is string && request.resource.data.fnote.size() < 200
+          && resource.data.status in ['new','prep','sent']));
+      allow delete: if isAdmin();
+    }
   }
 }

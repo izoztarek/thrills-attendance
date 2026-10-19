@@ -157,3 +157,24 @@ label.f small{font-weight:400}
 .bigbtn .bt{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,11vw,3.6rem);line-height:1.1}
 .bigbtn .bs{font-size:1.05rem;opacity:.92;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* orders */
+.fls{display:flex;flex-direction:column}
+.fr{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.fr:last-child{border-bottom:0}
+.fr>b{flex:1 1 110px;overflow-wrap:anywhere}
+.stp{display:flex;align-items:center;gap:6px}
+.stp small{min-width:36px}
+.stp button{width:44px;height:44px;border-radius:14px;background:var(--surface2);font-size:1.4rem;font-weight:700;line-height:1}
+.stp button:active{transform:scale(.94)}
+.stp output{min-width:30px;text-align:center;font-family:var(--f-display);font-size:1.3rem;font-variant-numeric:tabular-nums}
+.stp.on output{color:var(--accent)}
+.stp.on button:last-child{background:var(--accent);color:var(--accent-ink)}
+.cartbar{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 16px;border-radius:20px;background:var(--surface);border:1.5px solid var(--accent);box-shadow:var(--shadow)}
+.oc{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:18px;background:var(--surface);border:1.5px solid var(--line);box-shadow:var(--shadow)}
+.oc.urgent{border-color:var(--bad)}
+.oh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.oh small{flex:1 1 100%}
+.oi{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-weight:600}
+.fnote{padding:.45rem .8rem;border-radius:12px;background:var(--warn-bg);color:var(--warn);font-weight:600}

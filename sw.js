@@ -1,6 +1,6 @@
 // Service worker: يخلّي التطبيق يفتح حتى لو النت واقع، ويحدّث نفسه لما النت يرجع.
-const V = 'thrills-v1';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'firebase-config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const V = 'thrills-v2';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'orders.js', 'firebase-config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 const CDN = /^(www\.gstatic\.com\/firebasejs\/|fonts\.googleapis\.com\/|fonts\.gstatic\.com\/)/;
 
 self.addEventListener('install', e => {
