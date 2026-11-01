@@ -42,10 +42,10 @@ const S={db:null,auth:null,fbUser:null,isAdmin:false,alerts:[],sent:new Set(),cf
   adm:{until:0,keep:false,date:dkey(Date.now()),branch:'all'},rep:{from:'',to:'',branch:'all',recs:null,loading:false},draft:null,today:dkey(Date.now())};
 try{const b=localStorage.getItem('thrills.branch');if(b)S.branch=b}catch(e){}
 (function(){
-  const H=location.hash.replace('#','');let M=(H==='me'||H==='order'||H==='factory')?H:null;
+  const H=location.hash.replace('#','');let M=(H==='me'||H==='order'||H==='factory'||H==='recipes')?H:null;
   try{if(H==='home')localStorage.removeItem('thrills.mode');else if(M)localStorage.setItem('thrills.mode',M);else M=localStorage.getItem('thrills.mode')}catch(e){}
   S.meMode=(M==='me');
-  if(M==='order'||M==='factory')S.view=M;
+  if(M==='order'||M==='factory'||M==='recipes')S.view=M;
 })();
 S.me=null;S.meSearch='';S.meBusy=false;
 try{S.me=localStorage.getItem('thrills.me')}catch(e){}
@@ -126,10 +126,12 @@ function render(){
     setApp(head()+setupHTML());return;
   }
   if((S.view==='order'||S.view==='factory')&&window.ThrillsOrders){window.ThrillsOrders.render();return}
+  if(S.view==='recipes'&&window.ThrillsBook){window.ThrillsBook.render();return}
   if(S.meMode){S.view='me';meRender();return}
   if(S.view==='admin'&&S.isAdmin){
-    setApp(head(true)+'<nav class="tabs" role="tablist">'+[['today','اليوم'],['orders','الطلبات'],['report','التقارير'],['staff','الموظفين'],['oset','الأطعمة'],['alerts','التنبيهات'],['settings','الإعدادات']].map(t=>
-      '<button class="tab" role="tab" data-act="tab" data-t="'+t[0]+'" aria-selected="'+(S.tab===t[0])+'">'+t[1]+'</button>').join('')+'</nav><main class="panel" id="abody"></main>');
+    const sec=SECT.find(x=>x[2].indexOf(S.tab)>=0)||SECT[0];
+    setApp(head(true)+'<nav class="tabs" role="tablist">'+SECT.map(x=>'<button class="tab" role="tab" data-act="tab" data-t="'+x[2][0]+'" aria-selected="'+(x===sec)+'">'+x[1]+'</button>').join('')+'</nav>'+
+      (sec[2].length>1?'<div class="chips subtabs">'+sec[2].map(t=>'<button class="chip" data-act="tab" data-t="'+t+'" aria-pressed="'+(S.tab===t)+'">'+TABN[t]+'</button>').join('')+'</div>':'')+'<main class="panel" id="abody"></main>');
     adminBody();return;
   }
   S.view='kiosk';
@@ -138,9 +140,11 @@ function render(){
   const chips=brs.length>1?'<div class="chips" role="group" aria-label="الفرع">'+
     ['all'].concat(brs.map(b=>b.id)).map(id=>'<button class="chip" data-act="chip" data-b="'+esc(id)+'" aria-pressed="'+(S.branch===id)+'">'+(id==='all'?'كل الفروع':esc(brName(id)))+'</button>').join('')+'</div>':'<span></span>';
   setApp(head()+'<div class="bar">'+chips+'<label class="search"><input id="q" class="inp" type="search" placeholder="دوّر على اسمك" autocomplete="off" value="'+esc(S.search)+'"></label></div>'+
-    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
+    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-ba="open">وصفات الباريستا</button> <button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
   fillGrid();tick();
 }
+const SECT=[['att','الحضور',['today','report','staff','alerts']],['ord','الطلبات',['orders','oset']],['cost','التكلفة والوصفات',['ings','recs','calc']],['cfg','الإعدادات',['settings']]];
+const TABN={today:'اليوم',report:'التقارير',staff:'الموظفين',alerts:'التنبيهات',orders:'الطلبات',oset:'الأطعمة',ings:'الخامات',recs:'الوصفات',calc:'حاسبة كوست',settings:'الإعدادات'};
 function head(admin,sub){
   return '<header class="top"><div class="brand"><span class="logo">Thrills</span><span class="sub">'+(sub||(admin?'لوحة المدير':'الحضور والانصراف'))+'</span></div>'+
     (admin?'<button class="btn" data-act="logout">خروج</button>':'<div class="clock"><b id="clk"></b><span id="dt"></span></div>')+'</header>';
@@ -296,7 +300,7 @@ function showResult(r){
 const isStandalone=()=>{try{return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
 function enterAdmin(){S.view='admin';S.tab='today';S.adm.until=Date.now()+5*60000;S.adm.date=S.today;S.adm.branch='all';render()}
 function logout(){
-  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();
+  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();if(window.ThrillsCost)window.ThrillsCost.clear();
   try{localStorage.removeItem('thrills.keep')}catch(e){}
   if(S.auth)S.auth.signOut().catch(()=>{});
   render();
@@ -430,7 +434,7 @@ function tabAlerts(){
 
 function adminBody(){
   const el=$('#abody');if(!el)return;
-  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset()}[S.tab]();
+  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset(),ings:()=>window.ThrillsCost.tab('ings'),recs:()=>window.ThrillsCost.tab('recs'),calc:()=>window.ThrillsCost.tab('calc')}[S.tab]();
 }
 function branchChips(cur,act){
   const brs=S.cfg.branches||[];if(brs.length<2)return '';
@@ -809,7 +813,7 @@ async function boot(){
     if(u&&!adm){S.auth.signOut().catch(()=>{})}
     S.isAdmin=adm;if(adm)S.adm.keep=keep;
     if(adm)subAlerts();
-    else{if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
+    else{if(window.ThrillsCost)window.ThrillsCost.clear();if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
     if(!(S.view==='admin'&&adm&&S.tab==='settings'&&$('#abody')))render();
   });
   S.db.doc('config/main').onSnapshot(s=>{S.cfg=s.exists?s.data():null;S.loaded.cfg=true;S.cfgErr='';

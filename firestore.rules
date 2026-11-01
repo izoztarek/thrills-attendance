@@ -91,5 +91,16 @@ service cloud.firestore {
           && resource.data.status in ['new','prep','sent']));
       allow delete: if isAdmin();
     }
+
+    // التكلفة والوصفات: أسعار وتكاليف للمدير بس
+    match /ingredients/{id} { allow read, write: if isAdmin(); }
+    match /recipes/{id} { allow read, write: if isAdmin(); }
+    match /costcfg/{doc} { allow read, write: if isAdmin(); }
+
+    // كتاب الوصفات للباريستا (من غير أسعار تكلفة): الكل يقرا، المدير بس يكتب
+    match /recipebook/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
