@@ -46,7 +46,11 @@ service cloud.firestore {
         && request.resource.data.ts == request.time
         && ms(request.resource.data.inAt));
       allow update: if isAdmin() || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['outAt'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['outAt','earlyLeave'])
+        && (!('earlyLeave' in request.resource.data) || request.resource.data.earlyLeave == null
+            || (request.resource.data.earlyLeave is map && request.resource.data.earlyLeave.keys().hasOnly(['to','rem'])
+                && request.resource.data.earlyLeave.to is string && request.resource.data.earlyLeave.to.size() < 40
+                && request.resource.data.earlyLeave.rem is number))
         && (
           // تسجيل انصراف
           (resource.data.outAt == null && ms(request.resource.data.outAt))
@@ -102,5 +106,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // المرتبات: كلها للمدير بس (مرتبات، بنود، قواعد، شهور مقفولة)
+    match /pay/{id} { allow read, write: if isAdmin(); }
+    match /payitems/{id} { allow read, write: if isAdmin(); }
+    match /paycfg/{doc} { allow read, write: if isAdmin(); }
+    match /paymonths/{id} { allow read, write: if isAdmin(); }
   }
 }

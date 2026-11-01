@@ -143,8 +143,8 @@ function render(){
     '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-ba="open">وصفات الباريستا</button> <button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
   fillGrid();tick();
 }
-const SECT=[['att','الحضور',['today','report','staff','alerts']],['ord','الطلبات',['orders','oset']],['cost','التكلفة والوصفات',['ings','recs','calc']],['cfg','الإعدادات',['settings']]];
-const TABN={today:'اليوم',report:'التقارير',staff:'الموظفين',alerts:'التنبيهات',orders:'الطلبات',oset:'الأطعمة',ings:'الخامات',recs:'الوصفات',calc:'حاسبة كوست',settings:'الإعدادات'};
+const SECT=[['att','الحضور',['today','report','staff','alerts']],['ord','الطلبات',['orders','oset']],['cost','التكلفة والوصفات',['ings','recs','calc']],['pay','المرتبات',['payroll','payset']],['cfg','الإعدادات',['settings']]];
+const TABN={today:'اليوم',report:'التقارير',staff:'الموظفين',alerts:'التنبيهات',orders:'الطلبات',oset:'الأطعمة',ings:'الخامات',recs:'الوصفات',calc:'حاسبة كوست',payroll:'كشف الشهر',payset:'المرتبات والقواعد',settings:'الإعدادات'};
 function head(admin,sub){
   return '<header class="top"><div class="brand"><span class="logo">Thrills</span><span class="sub">'+(sub||(admin?'لوحة المدير':'الحضور والانصراف'))+'</span></div>'+
     (admin?'<button class="btn" data-act="logout">خروج</button>':'<div class="clock"><b id="clk"></b><span id="dt"></span></div>')+'</header>';
@@ -257,9 +257,9 @@ async function doAction(st){
   if(!S.loaded.att){toast('استنى ثانية والنظام يحمّل');return}
   const o=openRec(st.id);
   if(o){
-    const outAt=Date.now(),ref=S.db.doc('attendance/'+o.id);
-    if(!(await wr(()=>ref.update({outAt}))))return showResult({kind:'err'});
-    return showResult({kind:'out',st,rec:o,outAt,undo:()=>ref.update({outAt:null})});
+    const rem=remainMin(o);
+    if(rem>(S.cfg.earlyTol==null?10:S.cfg.earlyTol))return earlySheet(st,o,rem);
+    return finishOut(st,o,null);
   }
   const inAt=Date.now(),sh=shiftOf(st.shift),start=sh?sh.start:null;
   const rec={staffId:st.id,name:st.name,branch:devBranch(st),date:dkey(inAt),inAt,outAt:null,shiftId:st.shift||null,shiftStart:start,lateMin:lateOf(inAt,start,S.cfg.grace||0),manual:false,ts:firebase.firestore.FieldValue.serverTimestamp()};
@@ -267,6 +267,30 @@ async function doAction(st){
   if(!(await wr(()=>ref.set(rec))))return showResult({kind:'err'});
   showResult({kind:'in',st,rec,undo:()=>ref.delete()});
   afterIn(st,rec);
+}
+function shiftEndOf(o){
+  if(!o||!o.shiftStart)return null;const off=offsetOf(o.inAt,o.shiftStart);if(off==null)return null;
+  return o.inAt-off*60000+(S.cfg.shiftHours||9)*3600e3;
+}
+function remainMin(o){const e=shiftEndOf(o);return e?Math.ceil((e-Date.now())/60000):0}
+async function finishOut(st,o,early){
+  const outAt=Date.now(),ref=S.db.doc('attendance/'+o.id),patch=early?{outAt,earlyLeave:early}:{outAt};
+  if(!(await wr(()=>ref.update(patch))))return showResult({kind:'err'});
+  if(early)push('🚪 '+st.name+' انصرف بدري '+fmtDur(early.rem)+' قبل نهاية الشيفت'+(brName(o.branch)?' ('+brName(o.branch)+')':'')+' وبلّغ '+early.to+' - الساعة '+fmtT(outAt),'leave');
+  showResult({kind:'out',st,rec:o,outAt,early,undo:()=>ref.update({outAt:null,earlyLeave:null})});
+}
+function earlySheet(st,o,rem){
+  const end=shiftEndOf(o),owners=(S.cfg.owners&&S.cfg.owners.length?S.cfg.owners:[]);
+  openModal('<div class="result"><div class="ic out">'+WAVE+'</div><h2>لسه بدري يا '+esc(st.name.split(' ')[0])+'</h2>'+
+    '<p>باقيلك <b class="num">'+fmtDur(rem)+'</b> على نهاية الشيفت (الساعة <b class="num">'+fmtT(end)+'</b>)</p>'+
+    '<div class="actions" style="justify-content:center"><button class="btn pri" data-act="close">أكمّل شغل</button><button class="btn" id="el-go">همشي بدري</button></div></div>');
+  $('#el-go').onclick=()=>{
+    if(!owners.length){closeModal();return finishOut(st,o,{to:'—',rem})}
+    openModal('<div class="result"><h2>بلّغت مين؟</h2><p class="muted" style="margin:0">اختار اللي استأذنته. هيوصله إشعار بانصرافك.</p>'+
+      '<div class="list" style="width:100%">'+owners.map((n,i)=>'<button class="btn" data-ow="'+i+'" style="width:100%;min-height:52px">'+esc(n)+'</button>').join('')+'</div>'+
+      '<button class="linkbtn" data-act="close">لأ، هكمّل شغل</button></div>');
+    document.querySelectorAll('[data-ow]').forEach(b=>b.onclick=()=>{b.disabled=true;closeModal();finishOut(st,o,{to:owners[Number(b.dataset.ow)],rem})});
+  };
 }
 const CHECK='<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const WAVE='<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
@@ -285,7 +309,7 @@ function showResult(r){
         (sh?'<small>شيفت '+esc(sh.name)+' من '+fmtHM(sh.start)+'</small>':'');
     }else{
       body='<div class="ic out">'+WAVE+'</div><h2>مع السلامة يا '+esc(first)+'</h2><p>انصرافك اتسجل الساعة <b class="num">'+fmtT(r.outAt)+'</b></p>'+
-        '<span class="pill">اشتغلت '+fmtDur((r.outAt-r.rec.inAt)/60000)+'</span>';
+        '<span class="pill">اشتغلت '+fmtDur((r.outAt-r.rec.inAt)/60000)+'</span>'+(r.early?' <span class="pill warn">انصراف بدري · بلّغت '+esc(r.early.to)+'</span>':'');
     }
     body+='<div class="actions" style="justify-content:center"><button class="btn pri" data-act="close">تمام</button><button class="btn" id="undo">غلطت؟ تراجع</button></div><div class="bar-t"><i></i></div>';
   }
@@ -300,7 +324,7 @@ function showResult(r){
 const isStandalone=()=>{try{return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
 function enterAdmin(){S.view='admin';S.tab='today';S.adm.until=Date.now()+5*60000;S.adm.date=S.today;S.adm.branch='all';render()}
 function logout(){
-  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();if(window.ThrillsCost)window.ThrillsCost.clear();
+  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();
   try{localStorage.removeItem('thrills.keep')}catch(e){}
   if(S.auth)S.auth.signOut().catch(()=>{});
   render();
@@ -364,8 +388,8 @@ function installApp(){
 function newTopic(){const a=new Uint8Array(12);crypto.getRandomValues(a);return 'thrills-'+Array.from(a).map(x=>(x%36).toString(36)).join('')}
 function push(msg,kind){
   const t=S.cfg&&S.cfg.ntfyTopic;if(!t)return;
-  const tags={late:'alarm_clock',early:'star',absent:'no_entry',forgot:'warning',test:'bell'}[kind]||'bell';
-  const pr={absent:4,late:3,forgot:4,early:2,test:3}[kind]||3;
+  const tags={late:'alarm_clock',early:'star',absent:'no_entry',forgot:'warning',leave:'door',test:'bell'}[kind]||'bell';
+  const pr={absent:4,late:3,forgot:4,early:2,leave:4,test:3}[kind]||3;
   try{fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:t,title:'Thrills - الحضور',message:msg,priority:pr,tags:[tags]})}).catch(()=>{})}catch(e){}
 }
 async function claimAlert(id,kind,st,msg){
@@ -434,7 +458,7 @@ function tabAlerts(){
 
 function adminBody(){
   const el=$('#abody');if(!el)return;
-  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset(),ings:()=>window.ThrillsCost.tab('ings'),recs:()=>window.ThrillsCost.tab('recs'),calc:()=>window.ThrillsCost.tab('calc')}[S.tab]();
+  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset(),ings:()=>window.ThrillsCost.tab('ings'),recs:()=>window.ThrillsCost.tab('recs'),calc:()=>window.ThrillsCost.tab('calc'),payroll:()=>window.ThrillsPay.tab('payroll'),payset:()=>window.ThrillsPay.tab('payset')}[S.tab]();
 }
 function branchChips(cur,act){
   const brs=S.cfg.branches||[];if(brs.length<2)return '';
@@ -500,7 +524,7 @@ function recModal(rec,staffId){
     if(!s){$('#r-err').textContent='اختار الموظف';return}
     const inAt=atTime(d,ti);let outAt=null;if(to){outAt=atTime(d,to);if(outAt<=inAt)outAt+=864e5}
     const sh=shiftOf(s.shift),start=sh?sh.start:(rec?rec.shiftStart:null);
-    const data={staffId:sid,name:s.name,branch:rec?rec.branch:s.branch,date:d,inAt,outAt,shiftId:s.shift||null,shiftStart:start||null,lateMin:lateOf(inAt,start,S.cfg.grace||0),manual:true};
+    const data={staffId:sid,name:s.name,branch:rec?rec.branch:s.branch,date:d,inAt,outAt,shiftId:s.shift||null,shiftStart:start||null,lateMin:lateOf(inAt,start,S.cfg.grace||0),manual:true};if(rec&&rec.earlyLeave)data.earlyLeave=rec.earlyLeave;
     const id=isNew?sid+'_'+inAt:rec.id;
     $('#r-save').disabled=true;
     if(await wr(()=>S.db.doc('attendance/'+id).set(data))){S.dayCache={};closeModal();adminBody();toast('اتحفظ')}else $('#r-save').disabled=false;
@@ -667,7 +691,7 @@ function newDraft(c){
   c=c||{};const al=c.alertOn||{};
   return{branches:(c.branches&&c.branches.length?c.branches:[{id:uid('b'),name:''}]).map(b=>({id:b.id,name:b.name})),
     shifts:(c.shifts&&c.shifts.length?c.shifts:[{id:uid('sh'),name:'صباحي',start:'09:00'},{id:uid('sh'),name:'مسائي',start:'17:00'}]).map(x=>({id:x.id,name:x.name,start:x.start})),
-    grace:c.grace==null?10:c.grace,earlyMin:c.earlyMin==null?30:c.earlyMin,absentAfter:c.absentAfter==null?60:c.absentAfter,forgotHours:c.forgotHours==null?12:c.forgotHours,
+    grace:c.grace==null?10:c.grace,earlyMin:c.earlyMin==null?30:c.earlyMin,absentAfter:c.absentAfter==null?60:c.absentAfter,forgotHours:c.forgotHours==null?12:c.forgotHours,shiftHours:c.shiftHours==null?9:c.shiftHours,earlyTol:c.earlyTol==null?10:c.earlyTol,owners:Array.isArray(c.owners)?c.owners.join('، '):(c.owners||'زياد، سيد، إبراهيم'),
     alertOn:{late:al.late!==false,early:al.early!==false,absent:al.absent!==false,forgot:al.forgot!==false},
     ntfyTopic:c.ntfyTopic||newTopic(),email:'',pw:'',pw2:''};
 }
@@ -686,6 +710,9 @@ function cfgForm(setup){
     '<div class="row2">'+num('earlyMin','يتحسب "حضر بدري" لو حضر قبل الشيفت بـ (دقيقة)','',240)+num('absentAfter','تنبيه الغياب بعد بداية الشيفت بـ (دقيقة)','',480)+'</div>'+
     num('forgotHours','تنبيه "نسي الانصراف" بعد (ساعة) من الحضور','',16)+
     '<div class="list" style="gap:6px;margin-top:4px">'+ck('late','نبّهني لما حد يتأخر')+ck('early','نبّهني لما حد يحضر بدري')+ck('absent','نبّهني لما حد يغيب')+ck('forgot','نبّهني لما حد ينسى الانصراف')+'</div>'+
+    '</section><section class="sec"><h3>الورديات والانصراف المبكر</h3><div class="row2">'+num('shiftHours','عدد ساعات الوردية','بتتحسب منها نهاية الشيفت والإضافي.',16)+num('earlyTol','سماح الانصراف المبكر (دقيقة)','لو باقي على نهاية الشيفت أكتر من كده، التابلت يسأل الموظف.',60)+'</div>'+
+    '<label class="f">الملّاك (اللي بيتبلّغوا بالانصراف المبكر)<input class="inp" data-k="owners" value="'+esc(d.owners)+'" autocomplete="off"><small>افصل بين الأسماء بفاصلة.</small></label></section>'+
+    '<section class="sec"><h3>قناة التنبيهات</h3>'+
     '<label class="f">اسم قناة التنبيهات (Topic)<input class="inp" dir="ltr" data-k="ntfyTopic" value="'+esc(d.ntfyTopic)+'" autocomplete="off"><small>اتولّد عشوائي. بتشترك فيه من تطبيق ntfy على موبايلك. متشاركوش مع حد.</small></label></section>'+
     (setup?'<section class="sec"><h3>حساب المدير</h3><small>الإيميل والباسورد دول هتدخل بيهم لوحة المدير. اكتبهم وخليهم معاك.</small>'+
       '<label class="f">الإيميل<input class="inp" type="email" dir="ltr" autocomplete="username" data-k="email" value="'+esc(d.email)+'"></label>'+
@@ -707,11 +734,15 @@ async function saveCfg(setup){
   if(!(earlyMin>=0&&earlyMin<=240))return err('الحضور بدري بين 0 و 240 دقيقة');
   if(!(absentAfter>=0&&absentAfter<=480))return err('تنبيه الغياب بين 0 و 480 دقيقة');
   if(!(forgotHours>=1&&forgotHours<=16))return err('تنبيه نسيان الانصراف بين 1 و 16 ساعة');
+  const shiftHours=Number(d.shiftHours),earlyTol=Number(d.earlyTol);
+  if(!(shiftHours>=1&&shiftHours<=16))return err('ساعات الوردية بين 1 و 16');
+  if(!(earlyTol>=0&&earlyTol<=60))return err('سماح الانصراف المبكر بين 0 و 60 دقيقة');
+  const owners=String(d.owners||'').split(/[,،\n]/).map(x=>x.trim()).filter(Boolean).slice(0,8);
   const topic=String(d.ntfyTopic||'').trim();
   if(!/^[A-Za-z0-9_-]{8,64}$/.test(topic))return err('اسم الـ Topic حروف إنجليزي وأرقام بس (8 أو أكتر)');
   if(!setup){const gone=(S.cfg.branches||[]).filter(b=>!branches.some(x=>x.id===b.id));
     if(gone.some(b=>S.staff.some(s=>s.branch===b.id)))return err('في موظفين على فرع عايز تشيله. انقلهم لفرع تاني الأول.')}
-  const next={branches,shifts,grace,earlyMin,absentAfter,forgotHours,alertOn:Object.assign({},d.alertOn),ntfyTopic:topic,createdAt:setup?Date.now():(S.cfg.createdAt||Date.now())};
+  const next={branches,shifts,grace,earlyMin,absentAfter,forgotHours,shiftHours,earlyTol,owners,alertOn:Object.assign({},d.alertOn),ntfyTopic:topic,createdAt:setup?Date.now():(S.cfg.createdAt||Date.now())};
   const btn=$('#c-save');
   if(setup){
     const em=String(d.email||'').trim(),pw=String(d.pw||'');
@@ -813,7 +844,7 @@ async function boot(){
     if(u&&!adm){S.auth.signOut().catch(()=>{})}
     S.isAdmin=adm;if(adm)S.adm.keep=keep;
     if(adm)subAlerts();
-    else{if(window.ThrillsCost)window.ThrillsCost.clear();if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
+    else{if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
     if(!(S.view==='admin'&&adm&&S.tab==='settings'&&$('#abody')))render();
   });
   S.db.doc('config/main').onSnapshot(s=>{S.cfg=s.exists?s.data():null;S.loaded.cfg=true;S.cfgErr='';
@@ -825,7 +856,7 @@ async function boot(){
   setInterval(sweep,60000);setTimeout(sweep,10000);
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
-window.__T={S,$,esc,toast,wr,openModal,closeModal,mapDocs,fmtT,fmtDate,fmtDur,dkey,uid,brName,hashPin,newTopic,setApp,head,render,norm,adminBody};
+window.__T={S,$,esc,toast,wr,offsetOf,atTime,addDays,fromKey,OPEN_MAX,DAYS,fmtDateY,shiftOf,fmtHM,hm,push,openModal,closeModal,mapDocs,fmtT,fmtDate,fmtDur,dkey,uid,brName,hashPin,newTopic,setApp,head,render,norm,adminBody};
 boot();
 
 
