@@ -222,3 +222,15 @@ label.f small{font-weight:400}
 .ir .irf input[data-ci="qty"]{width:60px}
 .ir .irf .un{width:96px;min-width:0;padding-inline:8px}
 .ir .irf .muted{flex:0 0 auto}
+
+/* accounting */
+.acf h3{margin-top:6px}
+.acf .stat b{font-size:1.5rem}
+.acf .xs{display:flex;flex-direction:column;gap:8px}
+.acf .xr{flex-wrap:wrap;gap:6px;justify-content:flex-start;border:1px solid var(--line);border-radius:14px;padding:8px}
+.acf .xr select{flex:1 1 150px;width:auto}
+.acf .xr .xa{flex:0 1 110px;width:110px}
+.acf .xr input:not(.xa){flex:1 1 160px;width:auto}
+.filebtn{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.mname{align-self:center;font-family:var(--f-display);font-size:1.2rem}
+.btn.lg{width:100%;min-height:54px;font-size:1.1rem;margin-bottom:8px}

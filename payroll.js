@@ -340,5 +340,20 @@ document.addEventListener('change',async e=>{
   if(await t.wr(()=>t.S.db.doc('pay/'+id).set({salary:v,updatedAt:Date.now()},{merge:true})))t.toast('اتحفظ');
 });
 
-window.ThrillsPay={tab(name){return name==='payset'?tabSet():tabPayroll()},clear,_t:{compute,DEF,c100}};
+async function salaryCost(month){
+  sub();
+  for(let i=0;i<60&&!ready();i++)await new Promise(r=>setTimeout(r,100));
+  if(!ready())return null;
+  const snap=P.months[month];
+  if(snap&&snap.locked&&snap.rows)return {cents:snap.rows.reduce((a,r)=>a+r.net-(r.adv||0)-(r.short||0),0),locked:true,n:snap.rows.length};
+  const t=T(),S=t.S,[a,b]=range(month);let recs;
+  if(P.recsFor===month&&P.recs)recs=P.recs;
+  else recs=t.mapDocs(await S.db.collection('attendance').where('date','>=',a).where('date','<=',b).get());
+  const e=env(),act=S.staff.filter(s=>s.active!==false||recs.some(r=>r.staffId===s.id));
+  const rs=act.map(s=>compute(s,P.pay[s.id],recs,P.items,P.cfg,month,e));
+  return {cents:rs.reduce((x,r)=>x+r.net-r.adv-r.short,0),locked:false,n:rs.length};
+}
+const isLocked=m=>!!(P.months[m]&&P.months[m].locked);
+
+window.ThrillsPay={salaryCost,isLocked,tab(name){return name==='payset'?tabSet():tabPayroll()},clear,_t:{compute,DEF,c100}};
 })();

@@ -140,11 +140,11 @@ function render(){
   const chips=brs.length>1?'<div class="chips" role="group" aria-label="الفرع">'+
     ['all'].concat(brs.map(b=>b.id)).map(id=>'<button class="chip" data-act="chip" data-b="'+esc(id)+'" aria-pressed="'+(S.branch===id)+'">'+(id==='all'?'كل الفروع':esc(brName(id)))+'</button>').join('')+'</div>':'<span></span>';
   setApp(head()+'<div class="bar">'+chips+'<label class="search"><input id="q" class="inp" type="search" placeholder="دوّر على اسمك" autocomplete="off" value="'+esc(S.search)+'"></label></div>'+
-    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-ba="open">وصفات الباريستا</button> <button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
+    '<div class="grid" id="grid"></div><div class="foot"><span id="presence"></span><span>'+(isStandalone()?'':'<button class="linkbtn" data-act="install">ثبّت التطبيق</button> ')+'<button class="linkbtn" data-ba="open">وصفات الباريستا</button> <button class="linkbtn" data-oa="open-order">طلب نواقص للمصنع</button> <button class="linkbtn" data-aa="open">تقفيل اليوم</button> <button class="linkbtn" data-act="admin-login">دخول المدير</button></span></div>');
   fillGrid();tick();
 }
-const SECT=[['att','الحضور',['today','report','staff','alerts']],['ord','الطلبات',['orders','oset']],['cost','التكلفة والوصفات',['ings','recs','calc']],['pay','المرتبات',['payroll','payset']],['cfg','الإعدادات',['settings']]];
-const TABN={today:'اليوم',report:'التقارير',staff:'الموظفين',alerts:'التنبيهات',orders:'الطلبات',oset:'الأطعمة',ings:'الخامات',recs:'الوصفات',calc:'حاسبة كوست',payroll:'كشف الشهر',payset:'المرتبات والقواعد',settings:'الإعدادات'};
+const SECT=[['att','الحضور',['today','report','staff','alerts']],['ord','الطلبات',['orders','oset']],['cost','التكلفة والوصفات',['ings','recs','calc']],['pay','المرتبات',['payroll','payset']],['acct','الحسابات',['closes','exps','pnl']],['cfg','الإعدادات',['settings']]];
+const TABN={today:'اليوم',report:'التقارير',staff:'الموظفين',alerts:'التنبيهات',orders:'الطلبات',oset:'الأطعمة',ings:'الخامات',recs:'الوصفات',calc:'حاسبة كوست',payroll:'كشف الشهر',payset:'المرتبات والقواعد',closes:'التقفيلات',exps:'المصروفات',pnl:'ملخص الشهر',settings:'الإعدادات'};
 function head(admin,sub){
   return '<header class="top"><div class="brand"><span class="logo">Thrills</span><span class="sub">'+(sub||(admin?'لوحة المدير':'الحضور والانصراف'))+'</span></div>'+
     (admin?'<button class="btn" data-act="logout">خروج</button>':'<div class="clock"><b id="clk"></b><span id="dt"></span></div>')+'</header>';
@@ -324,7 +324,7 @@ function showResult(r){
 const isStandalone=()=>{try{return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
 function enterAdmin(){S.view='admin';S.tab='today';S.adm.until=Date.now()+5*60000;S.adm.date=S.today;S.adm.branch='all';render()}
 function logout(){
-  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();
+  S.view='kiosk';S.draft=null;S.isAdmin=false;closeModal();if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();if(window.ThrillsAcct)window.ThrillsAcct.clear();
   try{localStorage.removeItem('thrills.keep')}catch(e){}
   if(S.auth)S.auth.signOut().catch(()=>{});
   render();
@@ -388,8 +388,8 @@ function installApp(){
 function newTopic(){const a=new Uint8Array(12);crypto.getRandomValues(a);return 'thrills-'+Array.from(a).map(x=>(x%36).toString(36)).join('')}
 function push(msg,kind){
   const t=S.cfg&&S.cfg.ntfyTopic;if(!t)return;
-  const tags={late:'alarm_clock',early:'star',absent:'no_entry',forgot:'warning',leave:'door',test:'bell'}[kind]||'bell';
-  const pr={absent:4,late:3,forgot:4,early:2,leave:4,test:3}[kind]||3;
+  const tags={late:'alarm_clock',early:'star',absent:'no_entry',forgot:'warning',leave:'door',close:'moneybag',closebad:'warning',test:'bell'}[kind]||'bell';
+  const pr={absent:4,late:3,forgot:4,early:2,leave:4,close:3,closebad:4,test:3}[kind]||3;
   try{fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({topic:t,title:'Thrills - الحضور',message:msg,priority:pr,tags:[tags]})}).catch(()=>{})}catch(e){}
 }
 async function claimAlert(id,kind,st,msg){
@@ -458,7 +458,7 @@ function tabAlerts(){
 
 function adminBody(){
   const el=$('#abody');if(!el)return;
-  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset(),ings:()=>window.ThrillsCost.tab('ings'),recs:()=>window.ThrillsCost.tab('recs'),calc:()=>window.ThrillsCost.tab('calc'),payroll:()=>window.ThrillsPay.tab('payroll'),payset:()=>window.ThrillsPay.tab('payset')}[S.tab]();
+  el.innerHTML={today:tabToday,report:tabReport,staff:tabStaff,alerts:tabAlerts,settings:tabSettings,orders:()=>window.ThrillsOrders.tabOrders(),oset:()=>window.ThrillsOrders.tabOset(),ings:()=>window.ThrillsCost.tab('ings'),recs:()=>window.ThrillsCost.tab('recs'),calc:()=>window.ThrillsCost.tab('calc'),payroll:()=>window.ThrillsPay.tab('payroll'),payset:()=>window.ThrillsPay.tab('payset'),closes:()=>window.ThrillsAcct.tab('closes'),exps:()=>window.ThrillsAcct.tab('exps'),pnl:()=>window.ThrillsAcct.tab('pnl')}[S.tab]();
 }
 function branchChips(cur,act){
   const brs=S.cfg.branches||[];if(brs.length<2)return '';
@@ -844,7 +844,7 @@ async function boot(){
     if(u&&!adm){S.auth.signOut().catch(()=>{})}
     S.isAdmin=adm;if(adm)S.adm.keep=keep;
     if(adm)subAlerts();
-    else{if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
+    else{if(window.ThrillsCost)window.ThrillsCost.clear();if(window.ThrillsPay)window.ThrillsPay.clear();if(window.ThrillsAcct)window.ThrillsAcct.clear();if(unsubAlerts){unsubAlerts();unsubAlerts=null}S.alerts=[];if(S.view==='admin')S.view='kiosk'}
     if(!(S.view==='admin'&&adm&&S.tab==='settings'&&$('#abody')))render();
   });
   S.db.doc('config/main').onSnapshot(s=>{S.cfg=s.exists?s.data():null;S.loaded.cfg=true;S.cfgErr='';
@@ -856,7 +856,7 @@ async function boot(){
   setInterval(sweep,60000);setTimeout(sweep,10000);
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
-window.__T={S,$,esc,toast,wr,offsetOf,atTime,addDays,fromKey,OPEN_MAX,DAYS,fmtDateY,shiftOf,fmtHM,hm,push,openModal,closeModal,mapDocs,fmtT,fmtDate,fmtDur,dkey,uid,brName,hashPin,newTopic,setApp,head,render,norm,adminBody};
+window.__T={openPin,S,$,esc,toast,wr,offsetOf,atTime,addDays,fromKey,OPEN_MAX,DAYS,fmtDateY,shiftOf,fmtHM,hm,push,openModal,closeModal,mapDocs,fmtT,fmtDate,fmtDur,dkey,uid,brName,hashPin,newTopic,setApp,head,render,norm,adminBody};
 boot();
 
 

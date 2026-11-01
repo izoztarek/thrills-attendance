@@ -71,6 +71,35 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // تقفيل اليوم والمصروفات والإعدادات: المدير بس يقرا. الكاشير على التابلت يقدر يعمل تقفيل جديد مرة واحدة لكل يوم (ويتسجل مصروفات الدرج)
+    match /closings/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() || (
+        id == request.resource.data.date + '_' + request.resource.data.branch
+        && request.resource.data.keys().hasOnly(['date','branch','by','byId','pos','manualPos','file','opening','counted','withdrawn','expTotal','expected','diff','note','ts'])
+        && request.resource.data.date is string && request.resource.data.date.size() == 10
+        && request.resource.data.branch is string && request.resource.data.branch.size() < 60
+        && request.resource.data.byId is string && exists(/databases/$(database)/documents/staff/$(request.resource.data.byId))
+        && request.resource.data.pos is map
+        && request.resource.data.note is string && request.resource.data.note.size() < 400
+        && request.resource.data.ts == request.time);
+      allow update, delete: if isAdmin();
+    }
+    match /expenses/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['date','branch','cat','amount','supplier','note','from','closingId','by','ts'])
+        && request.resource.data.from == 'drawer'
+        && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount < 100000
+        && request.resource.data.cat is string && request.resource.data.cat.size() < 40
+        && request.resource.data.note is string && request.resource.data.note.size() < 200
+        && request.resource.data.ts == request.time);
+      allow update, delete: if isAdmin();
+    }
+    match /acfg/{doc} {
+      allow read, write: if isAdmin();
+    }
+
     // طلبات نواقص الأيس كريم: الفرع بيعمل طلب جديد، والمصنع/الفرع بيغيّروا الحالة بس (بالترتيب)، والمدير بس هو اللي يمسح
     match /orders/{id} {
       allow read: if true;
